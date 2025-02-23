@@ -1,0 +1,2013 @@
+
+=== src/static/index.html ===
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serendipity</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        input, button {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #suggestions {
+            white-space: pre-wrap;
+        }
+        .error {
+            color: red;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Serendipity</h1>
+        <h2>Login</h2>
+        <form id="loginForm">
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Log In</button>
+        </form>
+        <div id="loginError" class="error"></div>
+    </div>
+
+    <div class="card">
+        <h2>Create User Profile</h2>
+        <form id="userForm">
+            <input type="text" name="name" placeholder="Name" required>
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <input type="text" name="location" placeholder="Location" required>
+            <input type="text" name="availability" placeholder="Availability (optional)">
+            <input type="text" name="interests" placeholder="Interests (comma-separated)">
+            <input type="text" name="goals" placeholder="Goals (comma-separated)">
+            <button type="submit">Create Profile & Get Suggestions</button>
+        </form>
+        <div id="userError" class="error"></div>
+    </div>
+
+    <div class="card">
+        <h2>Add Event Source</h2>
+        <form id="sourceForm">
+            <input type="text" name="userId" placeholder="User ID" required>
+            <input type="url" name="url" placeholder="Source URL" required>
+            <input type="text" name="type" placeholder="Source Type" required>
+            <button type="submit">Add Source</button>
+        </form>
+        <div id="sourceError" class="error"></div>
+    </div>
+
+    <div class="card">
+        <h2>Suggestions</h2>
+        <div id="suggestions"></div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: form.email.value,
+                        password: form.password.value
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('userId', data.userId);
+                    document.getElementById('loginError').textContent = '';
+                    alert('Logged in successfully!');
+                } else {
+                    document.getElementById('loginError').textContent = data.error || 'Failed to log in';
+                }
+            } catch (error) {
+                document.getElementById('loginError').textContent = error.message || 'Failed to log in';
+            }
+        });
+
+        document.getElementById('userForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            try {
+                const interests = form.interests.value.split(',')
+                    .filter(i => i.trim())
+                    .map(interest => ({ 
+                        interest: interest.trim(), 
+                        weight: 1 
+                    }));
+                
+                const goals = form.goals.value.split(',').filter(g => g.trim());
+                
+                const token = localStorage.getItem('token');
+                const response = await fetch('/', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify({
+                        name: form.name.value,
+                        email: form.email.value,
+                        password: form.password.value,
+                        location: form.location.value,
+                        availability: form.availability.value,
+                        interests,
+                        goals,
+                        getEvents: true
+                    })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    document.getElementById('suggestions').textContent = 
+                        JSON.stringify(data, null, 2);
+                    document.getElementById('userError').textContent = '';
+                    // Store token for new user
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('userId', data.profile.id);
+                    alert('User created successfully!');
+                } else {
+                    document.getElementById('userError').textContent = 
+                        data.error || 'Failed to create user';
+                    console.error('Create user error:', data);
+                }
+            } catch (error) {
+                document.getElementById('userError').textContent = 
+                    error.message || 'Failed to create user';
+            }
+        });
+
+        document.getElementById('sourceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('/add-source', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify({
+                        userId: form.userId.value,
+                        url: form.url.value,
+                        type: form.type.value
+                    })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    document.getElementById('sourceError').textContent = 
+                        'Event source added successfully';
+                } else {
+                    document.getElementById('sourceError').textContent = 
+                        data.error || 'Failed to add event source';
+                }
+            } catch (error) {
+                document.getElementById('sourceError').textContent = 
+                    error.message || 'Failed to add event source';
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+=== src/auth.ts ===
+
+import { create, verify, getNumericDate } from "djwt";
+
+// Generate a secure key for JWT signing
+const JWT_SECRET_KEY = await crypto.subtle.generateKey(
+  { name: "HMAC", hash: "SHA-256" },
+  true,
+  ["sign", "verify"]
+);
+const JWT_EXP_DAYS = 30;
+
+export interface AuthenticatedRequest extends Request {
+  userId?: string;
+}
+
+export async function generateToken(userId: string): Promise<string> {
+  const jwt = await create(
+    { alg: "HS256", typ: "JWT" },
+    { 
+      sub: userId,
+      exp: getNumericDate(JWT_EXP_DAYS * 24 * 60 * 60) // 30 days
+    },
+    JWT_SECRET_KEY
+  );
+  return jwt;
+}
+
+export async function verifyToken(token: string): Promise<string | null> {
+  try {
+    const payload = await verify(token, JWT_SECRET_KEY);
+    return payload.sub as string;
+  } catch {
+    return null;
+  }
+}
+
+export async function authMiddleware(req: Request): Promise<{ userId: string | null; error?: string }> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    return { userId: null, error: "No authorization header" };
+  }
+
+  const [type, token] = authHeader.split(" ");
+  if (type !== "Bearer" || !token) {
+    return { userId: null, error: "Invalid authorization header" };
+  }
+
+  const userId = await verifyToken(token);
+  if (!userId) {
+    return { userId: null, error: "Invalid token" };
+  }
+
+  return { userId };
+}
+
+export function generateApiKey(): string {
+  return `sk_${crypto.randomUUID().replace(/-/g, "")}`;
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  // In a real app, use bcrypt or similar. For demo, using a simple hash
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hash = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+  console.log('Password hashing:', { password, hash });
+  return hash;
+}
+
+
+=== src/dspy_mock.ts ===
+
+import * as cheerio from "cheerio";
+import { UserProfile, UserProfileManager } from "./user_profile.ts";
+
+async function tool_fetchData(url: string): Promise<string> {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP error ${response.status}`);
+        }
+        return await response.text();
+    } catch (error) {
+        console.error("Error in tool_fetchData:", error);
+        return `Error fetching data: ${error}`;
+    }
+}
+
+function tool_extractData(html: string, selector: string): string {
+    const $ = cheerio.load(html);
+    const elements = $(selector);
+
+    if (elements.length === 0) {
+        return "No elements found matching selector.";
+    }
+
+    const results: string[] = [];
+    elements.each((i, element) => {
+        let text = $(element).text().trim();
+        if (!text) { //Use the HTML if no InnerText
+            text = $(element).html()?.trim() || 'No Text';
+        }
+        results.push(text);
+    });
+
+    return results.join("\n");
+}
+
+interface Tool {
+    name: string;
+    description: string;
+    func: (input: string) => Promise<string> | string;
+}
+
+async function tool_networkAnalyzer(input: string): Promise<string> {
+    const { profileUrl } = JSON.parse(input);
+    const html = await tool_fetchData(profileUrl);
+    const skills = tool_extractData(html, ".pv-skill-categories-section");
+    const interests = tool_extractData(html, ".pv-interests-section");
+    return JSON.stringify({
+        connections: [{ id: "mock-id", skills, interests, confidence: 0.8 }],
+    });
+}
+
+async function tool_introductionCrafter(input: string): Promise<string> {
+    const { userProfile, targetProfile, context } = JSON.parse(input);
+    const message = `Hi ${targetProfile.name}, I'm ${userProfile.name}. ${context} We both seem passionate about ${targetProfile.interests[0]}. I'd love to chat about potential collaboration!`;
+    return JSON.stringify({ message });
+}
+
+async function tool_routineNudger(input: string): Promise<string> {
+    const { location, schedule } = JSON.parse(input);
+    return JSON.stringify({
+        suggestions: [{ place: `${location}-coffee-shop`, time: "10:00 AM", reason: "near event" }],
+    });
+}
+
+const tools: { [key: string]: (...args: any[]) => Promise<string> | string } = {
+    "fetchdata": tool_fetchData,
+    "extractdata": (input: string) => {
+        const [html, selector] = input.split('|||');
+        return tool_extractData(html, selector);
+    },
+    "networkanalyzer": tool_networkAnalyzer,
+    "eventsuggester": async (input: string) => {
+        // Import dynamically to avoid circular dependency
+        const { EventSuggester } = await import("./event_suggester.ts");
+        const { userProfile, startDate, endDate } = JSON.parse(input);
+        const profileManager = new UserProfileManager();
+        const suggester = new EventSuggester(profileManager);
+        const result = await suggester.forward({ userProfile: JSON.parse(userProfile), startDate, endDate });
+        return JSON.stringify(result.suggestions);
+    },
+    "introductioncrafter": tool_introductionCrafter,
+    "routinenudger": tool_routineNudger,
+};
+
+function findTool(toolName: string): Tool | undefined {
+    const key = toolName.toLowerCase();
+    if (tools[key]) {
+      return { name: toolName, description: "", func: tools[key] };
+    }
+    return undefined;
+}
+
+class Signature {
+    constructor(public inputKeys: string[], public outputKeys: string[]) {}
+}
+
+class Module {
+    constructor(public config: { name: string; signature: any }) {}
+}
+
+class Predict extends Module {
+    constructor(signature: any) {
+        super({ name: "predict", signature });
+    }
+
+    predict(input: any): Promise<any> | any {
+        return Promise.resolve();
+    }
+}
+
+export {
+    Signature,
+    Module,
+    Predict,
+    tools,
+    findTool,
+    tool_fetchData,
+    tool_extractData,
+    tool_networkAnalyzer,
+    tool_introductionCrafter,
+    tool_routineNudger
+};
+
+export type { Tool };
+
+
+=== src/event_suggester.ts ===
+
+import { Signature, Module, Predict, tool_fetchData, tool_extractData, findTool } from "./dspy_mock.ts";
+import { parseISO, parse, isValid } from "date-fns";
+import * as cheerio from "cheerio";
+import type { UserProfile, EventSourceConfig } from "./user_profile.ts";
+import { UserProfileManager } from "./user_profile.ts";
+
+interface EventSuggestion {
+    title: string;
+    description: string;
+    url: string;
+    startTime: string;
+    endTime?: string;
+    venue?: string;
+    source: string;
+    confidence: number;
+}
+
+interface EventSuggesterInput {
+    userProfile: UserProfile;
+    startDate?: string;
+    endDate?: string;
+}
+
+interface EventSuggesterOutput {
+    suggestions: EventSuggestion[];
+}
+
+class EventSuggester extends Predict {
+    private userProfileManager: UserProfileManager;
+    private _events: EventSuggestion[] = [];
+
+    constructor(userProfileManager: UserProfileManager) {
+        super(new Signature(["userProfile", "startDate", "endDate"], ["suggestions"]));
+        this.userProfileManager = userProfileManager;
+    }
+
+    static ScrapingAgent = class extends Predict {
+        constructor() {
+            super(
+                new Signature(
+                    ["source"],
+                    ["events"]
+                )
+            );
+        }
+
+        override async predict(inputs: {source: EventSourceConfig}): Promise<{ events: EventSuggestion[] }> {
+            const source = inputs.source;
+            const selectors = source.selectors || {
+                title: "h2.event-title",
+                description: "div.event-description",
+                datetime: "span.event-date",
+                location: "p.event-location"
+            };
+
+            try {
+                console.log(`Fetching data from ${source.url}`);
+                const html = await tool_fetchData(source.url);
+                console.log(`Received HTML:`, html.substring(0, 200) + '...');
+                const $ = cheerio.load(html);
+                const events: EventSuggestion[] = [];
+
+                console.log(`Looking for titles with selector: ${selectors.title}`);
+                $(selectors.title).each((i, element) => {
+                    const title = $(element).text().trim();
+                    if (!title) return;
+
+                    // Find elements using selectors
+                    const description = selectors.description ? $(selectors.description).eq(i).text().trim() : '';
+                    const datetime = selectors.datetime ? $(selectors.datetime).eq(i).text().trim() : '';
+                    const venue = selectors.location ? $(selectors.location).eq(i).text().trim() : '';
+
+                    console.log(`Event details:`, {
+                        title,
+                        description,
+                        datetime,
+                        venue
+                    });
+
+                    console.log(`Found event: ${title}`);
+                    events.push({
+                        title,
+                        description,
+                        url: source.url,
+                        startTime: datetime,
+                        venue,
+                        source: source.url,
+                        confidence: 0.7
+                    });
+                });
+
+                console.log(`Total events found: ${events.length}`);
+                return { events };
+            } catch (error) {
+                console.error("Error in ScrapingAgent predict:", error);
+                return { events: [] };
+            }
+        }
+    };
+
+    createScrapingAgent(source: EventSourceConfig): string {
+        const agentCode = `
+const cheerio = require("cheerio");
+const { Predict, Signature, tool_fetchData, tool_extractData, findTool } = require("./dspy_mock");
+const { parseISO, parse, isValid } = require("date-fns");
+
+class ScrapingAgent extends Predict {
+    constructor() {
+        super(
+            new Signature(
+                ["source"],
+                ["events"]
+            )
+        );
+    }
+
+    async predict(inputs) {
+        const source = inputs.source;
+        const selectors = source.selectors || {
+            title: "h1, h2, h3",
+            description: "p, .description, .summary",
+            datetime: "time, .date, .datetime, meta[itemprop=startDate], meta[itemprop=endDate]",
+            location: ".location, .venue, meta[itemprop=location]",
+        };
+
+        try {
+            const html = await tool_fetchData(source.url);
+            const $ = cheerio.load(html);
+            const events = [];
+
+            $(selectors.title).each((i, element) => {
+                const title = $(element).text().trim();
+                if (!title) return;
+
+                const eventElement = $(element).closest('div, article, li, .event');
+                const description = tool_extractData(html, selectors.description);
+                const dateTimes = tool_extractData(html, selectors.datetime);
+                
+                let startTime = "";
+                let endTime = "";
+                if (dateTimes && dateTimes !== "No elements found matching selector.") {
+                    const parsedDate = parseISO(dateTimes);
+                    if (isValid(parsedDate)) {
+                        startTime = parsedDate.toISOString();
+                    } else {
+                        const formats = [
+                            "yyyy-MM-dd'T'HH:mm:ss",
+                            "yyyy-MM-dd'T'HH:mm",
+                            "MM/dd/yyyy HH:mm",
+                            "MM/dd/yyyy",
+                            "yyyy-MM-dd",
+                            "MMM dd, yyyy",
+                            "MMM dd, yyyy HH:mm",
+                            "dd MMM yyyy HH:mm",
+                            "dd MMM yyyy"
+                        ];
+
+                        for (const format of formats) {
+                            try {
+                                const parsedDate = parse(dateTimes, format, new Date());
+                                if (isValid(parsedDate)) {
+                                    startTime = parsedDate.toISOString();
+                                    break;
+                                }
+                            } catch (error) {
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                const venue = tool_extractData(html, selectors.location);
+                events.push({
+                    title,
+                    description: description !== "No elements found matching selector." ? description : "",
+                    url: source.url,
+                    startTime,
+                    endTime,
+                    venue: venue !== "No elements found matching selector." ? venue : undefined,
+                    source: source.url,
+                    confidence: 0.7,
+                });
+            });
+            
+            return { events };
+
+        } catch (error) {
+            console.error("Error in ScrapingAgent predict:", error);
+            return { events: [] };
+        }
+    }
+}
+return new ScrapingAgent();`;
+        return agentCode;
+    }
+
+    async forward(input: EventSuggesterInput): Promise<EventSuggesterOutput> {
+        try {
+            const { userProfile, startDate, endDate } = input;
+            this._events = [];
+            const allSuggestions: EventSuggestion[] = [];
+
+            // Iterate through event sources
+            for (const source of userProfile.eventSources) {
+                try {
+                    const agent = new EventSuggester.ScrapingAgent();
+                    const result = await agent.predict({ source });
+                    
+                    if (result.events && Array.isArray(result.events)) {
+                        this._events.push(...result.events);
+                    }
+
+                } catch (error) {
+                    console.error(`Error executing scraping agent for ${source.url}:`, error);
+                }
+            }
+
+            // Deduplication
+            const uniqueEvents = new Map<string, EventSuggestion>();
+            for (const event of this._events) {
+                const key = `${event.title}-${event.startTime}-${event.venue}`;
+                if (!uniqueEvents.has(key)) {
+                    const interestScore = this.calculateInterestScore(event, userProfile);
+                    if (interestScore > 0) {
+                        uniqueEvents.set(key, {
+                            ...event,
+                            confidence: event.confidence * (1 + interestScore)  // Boost confidence based on interest score
+                        });
+                    }
+                }
+            }
+
+            const suggestions = Array.from(uniqueEvents.values())
+                .sort((a, b) => b.confidence - a.confidence);
+
+            return { suggestions };
+
+        } catch (error) {
+            console.error('Error in EventSuggester:', error);
+            return { suggestions: [] };
+        }
+    }
+
+    private calculateInterestScore(event: EventSuggestion, userProfile: UserProfile): number {
+        let score = 0;
+        let matches = 0;
+
+        const text = `${event.title} ${event.description}`.toLowerCase();
+
+        // Score based on user's direct interests
+        for (const [interest, weight] of Object.entries(userProfile.interests)) {
+            if (text.includes(interest.toLowerCase())) {
+                score += weight;
+                matches++;
+            }
+        }
+
+        // Boost score if network connections with high confidence share similar interests
+        for (const connection of Object.values(userProfile.network)) {
+            if (connection.confidence >= 0.7) {  // Only consider strong connections
+                for (const interest of connection.interests) {
+                    if (text.includes(interest.toLowerCase())) {
+                        score += 0.1;  // Small boost for each matching network interest
+                        matches++;
+                    }
+                }
+            }
+        }
+
+        return matches > 0 ? score/matches : 0;
+    }
+
+    prepareAgentCodeForStorage(source: EventSourceConfig): string {
+        return this.createScrapingAgent(source);
+    }
+}
+
+export { EventSuggester };
+export type { 
+    EventSuggesterInput,
+    EventSuggesterOutput,
+    EventSuggestion 
+};
+
+
+=== src/main.ts ===
+
+import { UserProfileManager, UserProfile } from "./user_profile.ts";
+import { SerendipityAgent, SerendipityInput, SerendipityOutput } from "./serendipity_agent.ts";
+import { authMiddleware, generateToken, hashPassword, verifyToken } from "./auth.ts";
+import { Scheduler } from "./scheduler.ts";
+
+// Create instances
+const userManager = new UserProfileManager();
+const serendipityAgent = new SerendipityAgent(userManager);
+const scheduler = new Scheduler(userManager);
+
+// Initialize user manager and start scheduler
+await userManager.loadProfiles();
+scheduler.start();
+
+
+interface CreateUserRequest {
+    name: string;
+    email: string;
+    location: string;
+    password?: string;
+    availability?: string;
+    interests?: Array<{ interest: string; weight: number }>;
+    getEvents?: boolean;
+    goals?: string[];
+    context?: string;
+}
+
+interface AddEventSourceRequest {
+    userId: string;
+    url: string;
+    type: string;
+    selectors?: {
+        title?: string;
+        description?: string;
+        datetime?: string;
+        location?: string;
+    };
+}
+
+async function handleCreateUser(body: CreateUserRequest): Promise<UserProfile> {
+    if (!body.name || typeof body.name !== 'string') {
+        throw new Error('Name is required and must be a string');
+    }
+    if (!body.email || typeof body.email !== 'string') {
+        throw new Error('Email is required and must be a string');
+    }
+    if (!body.location || typeof body.location !== 'string') {
+        throw new Error('Location is required and must be a string');
+    }
+
+    try {
+        if (!body.password) {
+            throw new Error('Password is required');
+        }
+        
+            const profile = await userManager.createUserProfile({
+                name: body.name,
+                email: body.email,
+                location: body.location,
+                availability: body.availability || 'anytime', // Set default if not provided
+                password: body.password
+            });
+
+        if (body.interests) {
+            for (const { interest, weight } of body.interests) {
+                await userManager.addInterest(profile.id, interest, weight);
+            }
+        }
+
+        return profile;
+    } catch (error) {
+        console.error('Error creating user:', error);
+        throw new Error('Failed to create user profile');
+    }
+}
+
+async function handleGetSuggestions(userProfile: UserProfile, body: { 
+    startDate?: string; 
+    endDate?: string;
+    goals?: string[];
+    context?: string;
+}): Promise<SerendipityOutput> {
+    if (!userProfile) {
+        throw new Error('User profile not found');
+    }
+
+    try {
+        const input: SerendipityInput = {
+            userProfile,
+            goals: body.goals,
+            timeframe: body.startDate && body.endDate ? {
+                start: body.startDate,
+                end: body.endDate
+            } : undefined
+        };
+
+        const output = await serendipityAgent.predict(input);
+        return output;
+    } catch (error) {
+        console.error('Error getting suggestions:', error);
+        throw new Error('Failed to get suggestions');
+    }
+}
+
+async function handleAddEventSource(userProfile: UserProfile, body: AddEventSourceRequest): Promise<void> {
+    if (!userProfile) {
+        throw new Error('User profile not found');
+    }
+    if (!body.url || typeof body.url !== 'string') {
+        throw new Error('URL is required and must be a string');
+    }
+    if (!body.type || typeof body.type !== 'string') {
+        throw new Error('Type is required and must be a string');
+    }
+
+    try {
+        await userManager.addEventSource(userProfile.id, {
+            url: body.url,
+            type: body.type,
+            selectors: body.selectors
+        });
+    } catch (error) {
+        console.error('Error adding event source:', error);
+        throw new Error('Failed to add event source');
+    }
+}
+
+async function handler(method: string, path: string, body: Record<string, unknown> = {}, req?: Request): Promise<{ statusCode: number; body: Record<string, unknown> }> {
+    try {
+        if (method === 'GET' && path === '/') {
+            return {
+                statusCode: 200,
+                body: {
+                    api: {
+                        endpoints: {
+                            '/': {
+                                POST: {
+                                    description: 'Create a new user and get serendipitous suggestions',
+                                    body: {
+                                        name: 'string (required)',
+                                        email: 'string (required)',
+                                        location: 'string (required)',
+                                        availability: 'string (optional)',
+                                        interests: 'Array<{interest: string, weight: number}> (optional)',
+                                        goals: 'string[] (optional)',
+                                        context: 'string (optional)'
+                                    }
+                                }
+                            },
+                            '/add-source': {
+                                POST: {
+                                    description: 'Add an event source to a user profile',
+                                    body: {
+                                        userId: 'string (required)',
+                                        url: 'string (required)',
+                                        type: 'string (required)',
+                                        selectors: {
+                                            title: 'string (optional)',
+                                            description: 'string (optional)',
+                                            datetime: 'string (optional)',
+                                            location: 'string (optional)'
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        // Public endpoints
+        if (method === 'POST' && path === '/login') {
+            const { email, password } = body as { email?: string; password?: string };
+            if (!email || !password) {
+                return {
+                    statusCode: 400,
+                    body: { error: 'Email and password are required' }
+                };
+            }
+
+            // Find user by email
+            const user = Object.values(userManager.getUserProfiles()).find((p: UserProfile) => p.email === email);
+            if (!user || !user.passwordHash) {
+                return {
+                    statusCode: 401,
+                    body: { error: 'Invalid credentials' }
+                };
+            }
+
+            // Verify password
+            const hashedPassword = await hashPassword(password);
+            console.log('Login attempt:', {
+                providedEmail: email,
+                userFound: !!user,
+                hashedPassword,
+                storedHash: user.passwordHash,
+                matches: hashedPassword === user.passwordHash
+            });
+            if (hashedPassword !== user.passwordHash) {
+                return {
+                    statusCode: 401,
+                    body: { error: 'Invalid credentials' }
+                };
+            }
+
+            // Generate JWT
+            const token = await generateToken(user.id);
+            return {
+                statusCode: 200,
+                body: { token, userId: user.id }
+            };
+        }
+
+        // Protected endpoints
+        if (path !== '/' && path !== '/login') {
+            if (!req) {
+                return {
+                    statusCode: 401,
+                    body: { error: 'Authentication required' }
+                };
+            }
+
+            const auth = await authMiddleware(req);
+            if (auth.error || !auth.userId) {
+                return {
+                    statusCode: 401,
+                    body: { error: auth.error || 'Authentication required' }
+                };
+            }
+
+            // For /add-source, validate that the authenticated user matches the requested userId
+            if (path === '/add-source' && body.userId !== auth.userId) {
+                return {
+                    statusCode: 403,
+                    body: { error: 'Not authorized to modify this user' }
+                };
+            }
+        }
+
+        if (method === 'POST' && path === '/') {
+            // Validate required fields before casting
+            if (typeof body.name !== 'string' || typeof body.email !== 'string' || typeof body.location !== 'string') {
+                return {
+                    statusCode: 400,
+                    body: { error: 'name, email, and location are required and must be strings' }
+                };
+            }
+            const profile = await handleCreateUser(body as unknown as CreateUserRequest);
+            const token = await generateToken(profile.id);
+            const response: Record<string, unknown> = { profile, token };
+
+            if (body.getEvents || body.goals || body.context) {
+                const suggestions = await handleGetSuggestions(profile, body);
+                response.suggestions = suggestions.suggestions;
+            }
+
+            return {
+                statusCode: 201,
+                body: response
+            };
+        }
+
+        if (method === 'POST' && path === '/add-source') {
+            const userId = body.userId as string;
+            if (!userId) {
+                return {
+                    statusCode: 400,
+                    body: { error: 'userId is required' }
+                };
+            }
+            const profile = userManager.getUserProfile(userId);
+            if (!profile) {
+                return {
+                    statusCode: 404,
+                    body: { error: 'User not found' }
+                };
+            }
+
+            // Validate required fields before casting
+            if (typeof body.url !== 'string' || typeof body.type !== 'string') {
+                return {
+                    statusCode: 400,
+                    body: { error: 'url and type are required and must be strings' }
+                };
+            }
+            await handleAddEventSource(profile, body as unknown as AddEventSourceRequest);
+            const url = body.url as string;
+            const eventSource = await userManager.getEventSource(profile.id, url);
+            
+            // Get suggestions after adding the source
+            const suggestions = await handleGetSuggestions(profile, {});
+            
+            return {
+                statusCode: 200,
+                body: {
+                    eventSource: eventSource || { error: 'Event source not found after adding' },
+                    suggestions: suggestions.suggestions
+                }
+            };
+        }
+
+        return {
+            statusCode: 404,
+            body: { error: 'Not found' }
+        };
+    } catch (error: unknown) {
+        console.error('Handler error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+        return {
+            statusCode: errorMessage.includes('not found') ? 404 : 400,
+            body: { error: errorMessage }
+        };
+    }
+}
+
+export { handler };
+export type { CreateUserRequest, AddEventSourceRequest };
+
+// CLI and HTTP deployment modes
+if (import.meta.main) {
+    const args = Deno.args;
+    if (args[0] === "cli") {
+        // CLI mode
+        const userId = args[1];
+        const goals = args[2]?.split(",") || [];
+        
+        if (!userId) {
+            console.error("Usage: deno run main.ts cli <userId> [goals]");
+            Deno.exit(1);
+        }
+
+        const profile = userManager.getUserProfile(userId);
+        if (!profile) {
+            console.error("User profile not found");
+            Deno.exit(1);
+        }
+
+        try {
+            const result = await serendipityAgent.predict({ 
+                userProfile: profile, // No type assertion needed since null check ensures it's UserProfile
+                goals: goals
+            });
+            console.log(JSON.stringify(result, null, 2));
+        } catch (error) {
+            console.error("Error getting suggestions:", error);
+            Deno.exit(1);
+        }
+    } else {
+        // HTTP and WebSocket mode
+        const port = parseInt(Deno.env.get("PORT") || "8000");
+        Deno.serve({ port }, async (req: Request) => {
+            // Handle WebSocket upgrade
+            if (req.headers.get("upgrade") === "websocket") {
+                const url = new URL(req.url);
+                const userId = url.searchParams.get("userId");
+                const token = url.searchParams.get("token");
+
+                if (!userId || !token) {
+                    return new Response("Missing userId or token", { status: 400 });
+                }
+
+                // Verify token
+                const validUserId = await verifyToken(token);
+                if (!validUserId || validUserId !== userId) {
+                    return new Response("Invalid token", { status: 401 });
+                }
+
+                const { socket, response } = Deno.upgradeWebSocket(req);
+                scheduler.addConnection(userId, socket);
+                return response;
+            }
+
+            const { method, url } = req;
+            const path = new URL(url).pathname;
+
+            // Serve index.html for root path
+            if (method === "GET" && (path === "/" || path === "/index.html")) {
+                return serveStaticFile("/index.html");
+            }
+
+            // Handle API requests
+            const body = method === "GET" ? {} : await req.json();
+            const response = await handler(method, path, body, req);
+            return new Response(JSON.stringify(response.body), {
+                status: response.statusCode,
+                headers: { "Content-Type": "application/json" }
+            });
+        });
+    }
+}
+
+// Serve static files
+async function serveStaticFile(path: string): Promise<Response> {
+    try {
+        const file = await Deno.readFile(`src/static${path}`);
+        const contentType = path.endsWith('.html') ? 'text/html' :
+                          path.endsWith('.js') ? 'text/javascript' :
+                          path.endsWith('.css') ? 'text/css' :
+                          'application/octet-stream';
+        
+        return new Response(file, {
+            headers: { "Content-Type": contentType }
+        });
+    } catch {
+        return new Response('Not found', { status: 404 });
+    }
+}
+
+
+=== src/scheduler.ts ===
+
+import { UserProfileManager } from "./user_profile.ts";
+import { EventSuggester } from "./event_suggester.ts";
+import { SmtpClient } from "https://deno.land/x/smtp@v0.7.0/mod.ts";
+
+const SCRAPE_INTERVAL_MS = 8 * 60 * 60 * 1000; // 8 hours (3 times per day)
+const SMTP_CONFIG = {
+    hostname: Deno.env.get("SMTP_HOSTNAME") || "",
+    port: Number(Deno.env.get("SMTP_PORT")) || 587,
+    username: Deno.env.get("SMTP_USERNAME") || "",
+    password: Deno.env.get("SMTP_PASSWORD") || ""
+};
+
+export class Scheduler {
+    private userManager: UserProfileManager;
+    private eventSuggester: EventSuggester;
+    private lastScrapeTime: number = 0;
+    private connections: Map<string, WebSocket[]> = new Map();
+
+    constructor(userManager: UserProfileManager) {
+        this.userManager = userManager;
+        this.eventSuggester = new EventSuggester(userManager);
+    }
+
+    start() {
+        // Check every minute if it's time to scrape
+        setInterval(() => this.checkAndScrape(), 60 * 1000);
+    }
+
+    private async checkAndScrape() {
+        const now = Date.now();
+        if (now - this.lastScrapeTime >= SCRAPE_INTERVAL_MS) {
+            console.log("Starting scheduled scrape...");
+            await this.scrapeAllSources();
+            this.lastScrapeTime = now;
+        }
+    }
+
+    private async scrapeAllSources() {
+        const profiles = Object.values(this.userManager.getUserProfiles());
+        
+        for (const profile of profiles) {
+            try {
+                const result = await this.eventSuggester.forward({
+                    userProfile: profile
+                });
+
+                // Notify connected clients
+                if (result.suggestions.length > 0) {
+                    this.notifyUser(profile.id, {
+                        type: "new_suggestions",
+                        suggestions: result.suggestions
+                    });
+
+                    // Send email if we have suggestions and SMTP is configured
+                    if (profile.email && SMTP_CONFIG.hostname) {
+                        await this.sendEmail(profile.email, this.buildEmailBody(profile, result.suggestions));
+                    }
+                }
+
+            } catch (error) {
+                console.error(`Error scraping sources for user ${profile.id}:`, error);
+            }
+        }
+    }
+
+    private buildEmailBody(profile: any, suggestions: any[]): string {
+        return `Hello ${profile.name},
+
+Here are your new event suggestions:
+
+${suggestions.map(suggestion => `
+- ${suggestion.title || 'Untitled Event'}
+  ${suggestion.description || 'No description available'}
+  ${suggestion.url || ''}`).join('\n')}
+
+Best regards,
+Serendipity Team`;
+    }
+
+    private async sendEmail(to: string, body: string) {
+        try {
+            const smtp = new SmtpClient();
+            await smtp.connect(SMTP_CONFIG);
+            await smtp.send({
+                from: "noreply@serendipityapp.com",
+                to,
+                subject: "Your Daily Serendipity Digest",
+                content: body,
+            });
+            await smtp.close();
+        } catch (err) {
+            console.error("Error sending email:", err);
+        }
+    }
+
+    addConnection(userId: string, ws: WebSocket) {
+        if (!this.connections.has(userId)) {
+            this.connections.set(userId, []);
+        }
+        this.connections.get(userId)?.push(ws);
+
+        ws.onclose = () => {
+            const connections = this.connections.get(userId);
+            if (connections) {
+                const index = connections.indexOf(ws);
+                if (index > -1) {
+                    connections.splice(index, 1);
+                }
+                if (connections.length === 0) {
+                    this.connections.delete(userId);
+                }
+            }
+        };
+    }
+
+    private notifyUser(userId: string, data: unknown) {
+        const connections = this.connections.get(userId);
+        if (connections) {
+            const message = JSON.stringify(data);
+            connections.forEach(ws => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(message);
+                }
+            });
+        }
+    }
+}
+
+
+=== src/serendipity_agent.test.ts ===
+
+import { SerendipityAgent, SerendipityInput, SerendipityOutput, ConnectionSuggestion, NudgeSuggestion } from "./serendipity_agent.ts";
+import { UserProfileManager, UserProfile } from "./user_profile.ts";
+import { assertEquals } from "https://deno.land/std@0.208.0/testing/asserts.ts";
+import { describe, beforeEach, it as test } from "https://deno.land/std@0.208.0/testing/bdd.ts";
+import { EventSuggestion } from "./event_suggester.ts";
+
+describe("SerendipityAgent", () => {
+    let userProfileManager: UserProfileManager;
+    let agent: SerendipityAgent;
+    let testProfile: UserProfile;
+
+    beforeEach(async () => {
+        userProfileManager = new UserProfileManager();
+        agent = new SerendipityAgent(userProfileManager);
+
+        // Create a test profile
+        testProfile = await userProfileManager.createUserProfile({
+            name: "Test User",
+            email: "test@example.com",
+            location: "San Francisco",
+            availability: "weekends",
+            password: "test123"
+        });
+
+        // Add test interests
+        await userProfileManager.addInterest(testProfile.id, "artificial intelligence", 0.9);
+        await userProfileManager.addInterest(testProfile.id, "blockchain", 0.7);
+        await userProfileManager.addInterest(testProfile.id, "startup networking", 0.8);
+
+        // Add test network connections
+        await userProfileManager.addNetworkConnection(testProfile.id, {
+            id: "john_doe",
+            name: "John Doe",
+            skills: ["machine learning", "python"],
+            interests: ["artificial intelligence", "data science"],
+            confidence: 0.2
+        });
+        await userProfileManager.addNetworkConnection(testProfile.id, {
+            id: "jane_smith",
+            name: "Jane Smith",
+            skills: ["blockchain development", "smart contracts"],
+            interests: ["blockchain", "cryptocurrency"],
+            confidence: 0.9
+        });
+        await userProfileManager.addNetworkConnection(testProfile.id, {
+            id: "bob_wilson",
+            name: "Bob Wilson",
+            skills: ["business development", "marketing"],
+            interests: ["startup networking", "venture capital"],
+            confidence: 0.1
+        });
+
+        // Add test event sources
+        await userProfileManager.addEventSource(testProfile.id, {
+            url: "http://localhost:8000/mock-events",
+            type: "tech-meetup",
+            selectors: {
+                title: "h2.event-title",
+                description: "div.event-description",
+                datetime: "span.event-date",
+                location: "p.event-location"
+            }
+        });
+    });
+
+    test("should analyze profile and generate suggestions", async () => {
+        const input: SerendipityInput = {
+            userProfile: testProfile,
+            goals: ["find AI collaborators", "learn blockchain"],
+            timeframe: {
+                start: "2025-03-01",
+                end: "2025-03-31"
+            }
+        };
+
+        const result = await agent.predict(input);
+
+        assertEquals(typeof result, 'object');
+        assertEquals(Array.isArray(result.suggestions), true);
+        assertEquals(result.suggestions.length > 0, true);
+
+        // Verify suggestion types
+        const types = new Set(result.suggestions.map((s: SerendipityOutput["suggestions"][0]) => s.type));
+        assertEquals(types.has("event"), true);
+        assertEquals(types.has("connection"), true);
+        assertEquals(types.has("nudge"), true);
+
+        // Verify suggestions are sorted by priority
+        const priorities = result.suggestions.map((s: SerendipityOutput["suggestions"][0]) => s.priority);
+        assertEquals(priorities, [...priorities].sort((a, b) => b - a));
+
+        // Verify connection suggestions for weak network connections
+        const connectionSuggestions = result.suggestions.filter((s: SerendipityOutput["suggestions"][0]) => s.type === "connection");
+        assertEquals(connectionSuggestions.some((s: SerendipityOutput["suggestions"][0]) => {
+            const suggestion = s.suggestion as ConnectionSuggestion;
+            return suggestion.contact === "john_doe" || suggestion.contact === "bob_wilson";
+        }), true);
+
+        // Verify event suggestions match interests
+        const eventSuggestions = result.suggestions.filter((s: SerendipityOutput["suggestions"][0]) => s.type === "event");
+        eventSuggestions.forEach((s: SerendipityOutput["suggestions"][0]) => {
+            const event = s.suggestion as EventSuggestion;
+            assertEquals(
+                event.title.toLowerCase().includes("ai") ||
+                event.title.toLowerCase().includes("blockchain") ||
+                event.description.toLowerCase().includes("ai") ||
+                event.description.toLowerCase().includes("blockchain"),
+                true
+            );
+        });
+    });
+
+    test("should adjust priorities based on goals", async () => {
+        const input: SerendipityInput = {
+            userProfile: testProfile,
+            goals: ["find AI collaborators"]
+        };
+
+        const result = await agent.predict(input);
+
+        // Verify AI-related suggestions have higher priority
+        const aiSuggestions = result.suggestions.filter((s: SerendipityOutput["suggestions"][0]) => 
+            s.reasoning.toLowerCase().includes("ai") ||
+            (s.type === "event" && ((s.suggestion as EventSuggestion).title.toLowerCase().includes("ai") ||
+                                  (s.suggestion as EventSuggestion).description.toLowerCase().includes("ai")))
+        );
+
+        aiSuggestions.forEach((s: SerendipityOutput["suggestions"][0]) => {
+            assertEquals(s.priority > 0.5, true);
+        });
+    });
+
+    test("should maintain suggestion history in memory", async () => {
+        const input: SerendipityInput = {
+            userProfile: testProfile
+        };
+
+        // Make multiple predictions
+        await agent.predict(input);
+        await agent.predict(input);
+        await agent.predict(input);
+
+        // Access private memory field for testing
+        const memory = (agent as any).memory.get(testProfile.id);
+        
+        assertEquals(typeof memory, 'object');
+        assertEquals(Array.isArray(memory.suggestionHistory), true);
+        assertEquals(memory.suggestionHistory.length > 0, true);
+        assertEquals(memory.suggestionHistory.length <= 10, true);
+
+        // Verify suggestion history structure
+        const lastSuggestion = memory.suggestionHistory[memory.suggestionHistory.length - 1];
+        assertEquals(typeof lastSuggestion.timestamp, 'string');
+        assertEquals(Array.isArray(lastSuggestion.suggestions), true);
+        assertEquals(typeof lastSuggestion.suggestions[0].type, 'string');
+        assertEquals(typeof lastSuggestion.suggestions[0].priority, 'number');
+        assertEquals(typeof lastSuggestion.suggestions[0].reasoning, 'string');
+    });
+
+    test("should handle errors gracefully", async () => {
+        const input: SerendipityInput = {
+            userProfile: {
+                ...testProfile,
+                interests: undefined // Introduce an error
+            } as any
+        };
+
+        const result = await agent.predict(input);
+
+        assertEquals(typeof result, 'object');
+        assertEquals(result.suggestions, []);
+    });
+});
+
+
+=== src/serendipity_agent.ts ===
+
+import { Signature, Module, Predict, Tool, findTool } from "./dspy_mock.ts";
+import { UserProfile, UserProfileManager, EventSourceConfig } from "./user_profile.ts";
+import { EventSuggester, EventSuggestion } from "./event_suggester.ts";
+import * as cheerio from "cheerio";
+
+const SYSTEM_PROMPT = `
+You are the Serendipity Engine, an AI designed to engineer beneficial chance encounters. Your goal is to connect the user with people who share interests, complement skills, or bridge networks, while suggesting events and routine changes to make these connections happen organically.
+
+Your process follows a ReAct loop:
+1. **Analyze**: Understand the user's goals, interests, and network.
+2. **Identify**: Find potential connections and opportunities.
+3. **Evaluate**: Assess value and likelihood of success.
+4. **Strategize**: Choose the best approach (event, introduction, nudge).
+5. **Act**: Execute using tools.
+6. **Observe**: Track outcomes.
+7. **Learn**: Refine strategies based on feedback.
+
+Tools: {TOOL_LIST}
+Output format:
+- Thought: <reasoning>
+- Action: <ToolName>|<input>
+- Observation: <result>
+- Final: <recommendation>
+`;
+
+interface SerendipityInput {
+    userProfile: UserProfile;
+    goals?: string[];
+    timeframe?: {
+        start: string;
+        end: string;
+    };
+}
+
+interface SerendipityOutput {
+    suggestions: Array<{
+        type: "event" | "connection" | "nudge";
+        priority: number;
+        suggestion: EventSuggestion | ConnectionSuggestion | NudgeSuggestion;
+        reasoning: string;
+    }>;
+}
+
+interface ConnectionSuggestion {
+    contact: string;
+    sharedInterests: string[];
+    potentialValue: string;
+    introductionStrategy: string;
+}
+
+interface NudgeSuggestion {
+    action: string;
+    context: string;
+    expectedOutcome: string;
+    timing: string;
+}
+
+class SerendipityAgent extends Predict {
+    private userProfileManager: UserProfileManager;
+    private eventSuggester: EventSuggester;
+    private memory: Map<string, any>;
+
+    constructor(userProfileManager: UserProfileManager) {
+        super(new Signature(["userProfile", "goals"], ["suggestions"]));
+        this.userProfileManager = userProfileManager;
+        this.eventSuggester = new EventSuggester(userProfileManager);
+        this.memory = new Map();
+    }
+
+    private async analyzeProfile(profile: UserProfile): Promise<{
+        topInterests: string[];
+        networkGaps: string[];
+        routinePatterns: string[];
+    }> {
+        // Sort interests by weight
+        const topInterests = Object.entries(profile.interests)
+            .sort(([, a], [, b]) => (b as number) - (a as number))
+            .slice(0, 5)
+            .map(([interest]) => interest);
+
+        // Identify network gaps by analyzing connection confidence
+        const networkGaps = Object.entries(profile.network)
+            .filter(([, connection]) => connection.confidence < 0.3)
+            .map(([contact]) => contact);
+
+        // Analyze event patterns from history
+        const routinePatterns = profile.eventSources
+            .filter((source: EventSourceConfig) => source.successRate && source.successRate > 0.7)
+            .map(source => source.type);
+
+        return {
+            topInterests,
+            networkGaps,
+            routinePatterns
+        };
+    }
+
+    private async identifyOpportunities(
+        profile: UserProfile,
+        analysis: {
+            topInterests: string[];
+            networkGaps: string[];
+            routinePatterns: string[];
+        },
+        timeframe?: { start: string; end: string }
+    ): Promise<SerendipityOutput["suggestions"]> {
+        const suggestions: SerendipityOutput["suggestions"] = [];
+
+        // Get event suggestions
+        const eventResults = await this.eventSuggester.forward({
+            userProfile: profile,
+            startDate: timeframe?.start,
+            endDate: timeframe?.end
+        });
+
+        // Convert events to suggestions
+        eventResults.suggestions.forEach(event => {
+            suggestions.push({
+                type: "event",
+                priority: event.confidence,
+                suggestion: event,
+                reasoning: `Event matches interests: ${analysis.topInterests.filter(interest => 
+                    event.title.toLowerCase().includes(interest.toLowerCase()) || 
+                    event.description.toLowerCase().includes(interest.toLowerCase())
+                ).join(", ")}`
+            });
+        });
+
+        // Generate connection suggestions
+        for (const gap of analysis.networkGaps) {
+            const connection = profile.network[gap];
+            const sharedInterests = analysis.topInterests.filter(interest => 
+                connection && connection.interests.includes(interest)
+            );
+            
+            if (sharedInterests.length > 0) {
+                suggestions.push({
+                    type: "connection",
+                    priority: 0.8,
+                    suggestion: {
+                        contact: gap,
+                        sharedInterests,
+                        potentialValue: "Potential collaboration and knowledge sharing",
+                        introductionStrategy: "Suggest meeting at relevant industry event"
+                    } as ConnectionSuggestion,
+                    reasoning: `Strong interest overlap in: ${sharedInterests.join(", ")}`
+                });
+            }
+        }
+
+        // Generate routine nudges
+        if (analysis.routinePatterns.length > 0) {
+            suggestions.push({
+                type: "nudge",
+                priority: 0.6,
+                suggestion: {
+                    action: "Schedule regular attendance",
+                    context: `Regular participation in ${analysis.routinePatterns[0]} events`,
+                    expectedOutcome: "Strengthen network connections and stay updated in field",
+                    timing: "Weekly"
+                } as NudgeSuggestion,
+                reasoning: "Consistent engagement leads to stronger network connections"
+            });
+        }
+
+        return suggestions.sort((a, b) => b.priority - a.priority);
+    }
+
+    override async predict(input: SerendipityInput): Promise<SerendipityOutput> {
+        const { userProfile, goals } = input;
+        const profile = userProfile;
+        let thoughts: string[] = [];
+        let actions: string[] = [];
+        let observations: string[] = [];
+
+        try {
+            // 1. Analyze
+            console.log(`Analyzing user profile: ${profile.id}, goals: ${goals?.join(", ")}`);
+            const analysis = await this.analyzeProfile(profile);
+            console.log(`Analysis complete. Top interests: ${analysis.topInterests.join(", ")}`);
+
+            // 2. Identify (Network Analysis)
+            console.log(`Starting network analysis for event sources:`, profile.eventSources);
+            const networkResult = await this.identifyOpportunities(profile, analysis, input.timeframe);
+            console.log(`Found opportunities:`, networkResult);
+
+            // 3. Evaluate & Strategize
+            thoughts.push(`Evaluating opportunities and adjusting priorities based on goals`);
+            const suggestions = networkResult.map(opp => ({
+                ...opp,
+                priority: this.adjustPriorityBasedOnGoals(opp, goals, profile)
+            }));
+
+            // 4. Act
+            if (suggestions.length > 0) {
+                thoughts.push(`Selected top ${Math.min(3, suggestions.length)} suggestions for action`);
+                actions.push(`suggestionexecutor|${JSON.stringify({
+                    suggestions: suggestions.slice(0, 3)
+                })}`);
+            }
+
+            // 5. Observe & Learn
+            thoughts.push("Tracking outcomes to refine future suggestions");
+            this.updateMemory(profile.id, suggestions);
+
+            return { suggestions };
+        } catch (error: unknown) {
+            console.error("Error in SerendipityAgent predict:", error);
+            thoughts.push(`Error encountered: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            return { suggestions: [] };
+        }
+    }
+
+    private adjustPriorityBasedOnGoals(
+        opportunity: SerendipityOutput["suggestions"][0],
+        goals?: string[],
+        userProfile?: UserProfile
+    ): number {
+        let priority = opportunity.priority;
+
+        // Adjust based on success metrics
+        let userId: string | undefined;
+        
+        if (opportunity.type === "connection") {
+            userId = (opportunity.suggestion as ConnectionSuggestion).contact;
+        } else if (opportunity.type === "event") {
+            // For events, use the current user's metrics
+            userId = userProfile?.id;
+        } else {
+            // For nudges, use the current user's metrics
+            userId = userProfile?.id;
+        }
+
+        const metrics = userId 
+            ? this.userProfileManager.getUserProfile(userId)?.successMetrics?.[opportunity.type]
+            : undefined;
+
+        if (metrics && metrics.total > 0) {
+            const successRate = metrics.success / metrics.total;
+            priority *= (0.5 + successRate); // Scale priority based on past success
+        }
+
+        // Adjust based on goals
+        if (goals && goals.length > 0) {
+            const relevanceBoost = goals.some(goal => {
+                const goalLower = goal.toLowerCase();
+                if (opportunity.type === "event") {
+                    const event = opportunity.suggestion as EventSuggestion;
+                    return event.title.toLowerCase().includes(goalLower) ||
+                           event.description.toLowerCase().includes(goalLower);
+                }
+                return opportunity.reasoning.toLowerCase().includes(goalLower);
+            }) ? 0.2 : 0;
+            priority += relevanceBoost;
+        }
+
+        return Math.min(1, priority);
+    }
+
+    private async updateMemory(userId: string, suggestions: SerendipityOutput["suggestions"]): Promise<void> {
+        const userMemory = this.memory.get(userId) || {
+            suggestionHistory: [],
+            successfulStrategies: new Set<string>()
+        };
+
+        userMemory.suggestionHistory.push({
+            timestamp: new Date().toISOString(),
+            suggestions: suggestions.map(s => ({
+                type: s.type,
+                priority: s.priority,
+                reasoning: s.reasoning
+            }))
+        });
+
+        // Keep last 10 suggestions
+        if (userMemory.suggestionHistory.length > 10) {
+            userMemory.suggestionHistory.shift();
+        }
+
+        this.memory.set(userId, userMemory);
+
+        // Record outcomes in user profile
+        for (const suggestion of suggestions) {
+            const success = suggestion.priority > 0.7; // Consider high priority suggestions as successful
+            await this.userProfileManager.recordActionOutcome(userId, suggestion.type, success);
+        }
+    }
+}
+
+export { SerendipityAgent };
+export type {
+    SerendipityInput,
+    SerendipityOutput,
+    ConnectionSuggestion,
+    NudgeSuggestion
+};
+
+
+=== src/user_profile.ts ===
+
+import { hashPassword, generateApiKey } from "./auth.ts";
+
+interface EventSourceConfig {
+    url: string;
+    type: string; // e.g., 'eventbrite', 'meetup', 'custom'
+    selectors?: {
+        title?: string;
+        description?: string;
+        datetime?: string;
+        location?: string;
+    };
+    lastScraped?: string;
+    successRate?: number; // For self-improvement tracking
+}
+
+interface UserProfile {
+    id: string;
+    name: string;
+    email: string;
+    passwordHash?: string;
+    apiKey?: string;
+    interests: InterestGraph;
+    network: NetworkGraph;
+    location: string;
+    availability: string;
+    eventSources: EventSourceConfig[];
+    successMetrics: { [action: string]: { success: number; total: number } };
+}
+
+interface CreateUserProfileData extends Omit<UserProfile, "id" | "interests" | "network" | "eventSources" | "successMetrics" | "apiKey"> {
+    password?: string;
+}
+
+interface InterestGraph {
+    [topic: string]: number;
+}
+
+interface NetworkConnection {
+    id: string;
+    name: string;
+    skills: string[];
+    interests: string[];
+    confidence: number;
+}
+
+interface NetworkGraph {
+    [contact: string]: NetworkConnection;
+}
+
+class UserProfileManager {
+    private userProfiles: { [id: string]: UserProfile } = {};
+    private readonly storageFile = "./user_profiles.json";
+
+    constructor() {
+        this.loadProfiles();
+    }
+
+    public async loadProfiles() {
+        try {
+            const text = await Deno.readTextFile(this.storageFile);
+            this.userProfiles = JSON.parse(text);
+        } catch (error) {
+            if (!(error instanceof Deno.errors.NotFound)) {
+                console.error("Error loading profiles:", error);
+            }
+            this.userProfiles = {};
+            await this.saveProfiles();
+        }
+    }
+
+    private async saveProfiles() {
+        try {
+            await Deno.writeTextFile(this.storageFile, JSON.stringify(this.userProfiles, null, 2));
+        } catch (error) {
+            console.error("Error saving profiles:", error);
+        }
+    }
+
+async createUserProfile(profileData: CreateUserProfileData): Promise<UserProfile> {
+        const id = Math.random().toString(36).substring(2, 15);
+        console.log(`Creating user profile with ID: ${id}`);
+        
+        const passwordHash = profileData.password ? await hashPassword(profileData.password) : undefined;
+        console.log(`Password hash generated: ${passwordHash !== undefined}`);
+        
+        const newProfile: UserProfile = {
+            id,
+            name: profileData.name,
+            email: profileData.email,
+            location: profileData.location,
+            availability: profileData.availability || 'anytime',
+            passwordHash,
+            apiKey: generateApiKey(),
+            interests: {},
+            network: {},
+            eventSources: [],
+            successMetrics: {}
+        };
+        
+        this.userProfiles[id] = newProfile;
+        await this.saveProfiles();
+        console.log(`User profile saved successfully with ID: ${id}`);
+        return newProfile;
+    }
+
+    getUserProfile(id: string): UserProfile | undefined {
+        return this.userProfiles[id];
+    }
+
+    getUserProfiles(): { [id: string]: UserProfile } {
+        return this.userProfiles;
+    }
+
+    async updateUserProfile(id: string, updates: Partial<UserProfile>): Promise<UserProfile | undefined> {
+        const profile = this.userProfiles[id];
+        if (profile) {
+            Object.assign(profile, updates);
+            await this.saveProfiles();
+            return profile;
+        }
+        return undefined;
+    }
+
+    async addInterest(id: string, topic: string, level: number): Promise<void> {
+        const profile = this.userProfiles[id];
+        if (profile) {
+            profile.interests[topic] = Math.max(0, Math.min(1, level));
+            await this.saveProfiles();
+        }
+    }
+
+    async addNetworkConnection(id: string, connection: NetworkConnection): Promise<void> {
+        const profile = this.userProfiles[id];
+        if (profile) {
+            profile.network[connection.id] = {
+                ...connection,
+                confidence: Math.max(0, Math.min(1, connection.confidence))
+            };
+            await this.saveProfiles();
+        }
+    }
+
+    async addEventSource(id: string, source: EventSourceConfig): Promise<void> {
+        const profile = this.userProfiles[id];
+        if (profile) {
+            if (!profile.eventSources) {
+                profile.eventSources = [];
+            }
+            profile.eventSources.push({
+                ...source,
+                lastScraped: new Date().toISOString(),
+                successRate: 1.0
+            });
+            await this.saveProfiles();
+        }
+    }
+
+    async recordActionOutcome(id: string, action: string, success: boolean): Promise<void> {
+        const profile = this.userProfiles[id];
+        if (profile) {
+            if (!profile.successMetrics[action]) {
+                profile.successMetrics[action] = { success: 0, total: 0 };
+            }
+            profile.successMetrics[action].total += 1;
+            if (success) {
+                profile.successMetrics[action].success += 1;
+            }
+            await this.saveProfiles();
+        }
+    }
+
+    async updateEventSourceStats(id: string, sourceUrl: string, success: boolean): Promise<void> {
+        const profile = this.userProfiles[id];
+        if (profile) {
+            const source = profile.eventSources.find(s => s.url === sourceUrl);
+            if (source && source.successRate !== undefined) {
+                // Exponential moving average for success rate
+                source.successRate = source.successRate * 0.9 + (success ? 0.1 : 0);
+                source.lastScraped = new Date().toISOString();
+                await this.saveProfiles();
+            }
+        }
+    }
+
+    getEventSource(id: string, sourceUrl: string): EventSourceConfig | undefined {
+        const profile = this.userProfiles[id];
+        if (profile) {
+            return profile.eventSources.find(s => s.url === sourceUrl);
+        }
+        return undefined;
+    }
+}
+
+export { UserProfileManager };
+export type {
+    UserProfile,
+    EventSourceConfig,
+    InterestGraph,
+    NetworkGraph
+};
+
+
+=== deno.json ===
+
+{
+  "tasks": {
+    "start": "deno run --allow-net --allow-env --allow-read --allow-write --watch src/main.ts",
+    "scrape": "deno run --allow-net --allow-env --allow-read --allow-write --watch src/event_suggester.ts"
+  },
+  "imports": {
+    "djwt": "https://deno.land/x/djwt@v3.0.1/mod.ts",
+    "dspy/": "https://deno.land/x/dspy/",
+    "onnxruntime-web": "https://esm.sh/onnxruntime-web@1.17.1",
+    "cheerio": "https://esm.sh/cheerio@1.0.0-rc.12",
+    "cheerio/": "https://esm.sh/cheerio@1.0.0-rc.12/",
+    "std/": "https://deno.land/std@0.208.0/",
+    "date-fns": "npm:date-fns@2.30.0"
+  },
+  "compilerOptions": {
+    "lib": ["deno.ns", "deno.unstable", "dom", "esnext"],
+    "types": ["deno"]
+  }
+}
+
+
+=== run-serendipity.sh ===
+
+#!/bin/bash
+
+# Navigate to project root (where user_profiles.json is located)
+cd "$(dirname "$0")"
+
+# Check if user ID is provided
+if [ -z "$1" ]; then
+    echo "Usage: ./run-serendipity.sh <userId> [goals]"
+    echo "Example: ./run-serendipity.sh nz7nnwkdhls \"find AI collaborators,learn blockchain\""
+    exit 1
+fi
+
+USER_ID="$1"
+GOALS="$2"
+
+# Run Deno CLI mode with all necessary permissions
+OUTPUT=$(deno run --allow-net --allow-env --allow-read --allow-write src/main.ts cli "$USER_ID" "$GOALS" 2> error.log)
+
+# Check exit status
+if [ $? -ne 0 ]; then
+    echo "Error running Deno script. Check error.log:"
+    cat error.log
+    exit 1
+fi
+
+# Output suggestions
+echo "$OUTPUT"
+
+exit 0
+
+
+=== user_profiles.json ===
+
+{
+  "etss2vpnzoq": {
+    "id": "etss2vpnzoq",
+    "name": "Test User",
+    "email": "test@example.com",
+    "location": "San Francisco",
+    "availability": "weekends",
+    "passwordHash": "ecd71870d1963316a97e3ac3408c9835ad8cf0f3c1bc703527c30265534f75ae",
+    "successMetrics": {},
+    "interests": {},
+    "network": {},
+    "eventSources": []
+  },
+  "jl4ia2q0ujl": {
+    "id": "jl4ia2q0ujl",
+    "name": "Chris Royse",
+    "email": "hotrail85@gmail.com",
+    "location": "Junction City Kansas",
+    "availability": "anytime",
+    "passwordHash": "0851028eae8fa2b7b41578848dbffa34a5ef0dbeec9755c8ebb2b3955f65012a",
+    "apiKey": "sk_4212c66cf56f4ff19db3ee77ed6b478c",
+    "interests": {
+      "computer science": 1,
+      "AI": 1
+    },
+    "network": {},
+    "eventSources": [],
+    "successMetrics": {}
+  }
+}

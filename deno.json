@@ -1,0 +1,19 @@
+{
+  "tasks": {
+    "start": "deno run --allow-net --allow-env --allow-read --allow-write --watch src/main.ts",
+    "scrape": "deno run --allow-net --allow-env --allow-read --allow-write --watch src/event_suggester.ts"
+  },
+  "imports": {
+    "djwt": "https://deno.land/x/djwt@v3.0.1/mod.ts",
+    "dspy/": "https://deno.land/x/dspy/",
+    "onnxruntime-web": "https://esm.sh/onnxruntime-web@1.17.1",
+    "cheerio": "https://esm.sh/cheerio@1.0.0-rc.12",
+    "cheerio/": "https://esm.sh/cheerio@1.0.0-rc.12/",
+    "std/": "https://deno.land/std@0.208.0/",
+    "date-fns": "npm:date-fns@2.30.0"
+  },
+  "compilerOptions": {
+    "lib": ["deno.ns", "deno.unstable", "dom", "esnext"],
+    "types": ["deno"]
+  }
+}

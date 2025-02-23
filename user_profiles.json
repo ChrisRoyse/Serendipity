@@ -1,0 +1,30 @@
+{
+  "etss2vpnzoq": {
+    "id": "etss2vpnzoq",
+    "name": "Test User",
+    "email": "test@example.com",
+    "location": "San Francisco",
+    "availability": "weekends",
+    "passwordHash": "ecd71870d1963316a97e3ac3408c9835ad8cf0f3c1bc703527c30265534f75ae",
+    "successMetrics": {},
+    "interests": {},
+    "network": {},
+    "eventSources": []
+  },
+  "jl4ia2q0ujl": {
+    "id": "jl4ia2q0ujl",
+    "name": "Chris Royse",
+    "email": "hotrail85@gmail.com",
+    "location": "Junction City Kansas",
+    "availability": "anytime",
+    "passwordHash": "0851028eae8fa2b7b41578848dbffa34a5ef0dbeec9755c8ebb2b3955f65012a",
+    "apiKey": "sk_4212c66cf56f4ff19db3ee77ed6b478c",
+    "interests": {
+      "computer science": 1,
+      "AI": 1
+    },
+    "network": {},
+    "eventSources": [],
+    "successMetrics": {}
+  }
+}

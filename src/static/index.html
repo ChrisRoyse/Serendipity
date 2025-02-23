@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serendipity</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        input, button {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #suggestions {
+            white-space: pre-wrap;
+        }
+        .error {
+            color: red;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Serendipity</h1>
+        <h2>Login</h2>
+        <form id="loginForm">
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Log In</button>
+        </form>
+        <div id="loginError" class="error"></div>
+    </div>
+
+    <div class="card">
+        <h2>Create User Profile</h2>
+        <form id="userForm">
+            <input type="text" name="name" placeholder="Name" required>
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <input type="text" name="location" placeholder="Location" required>
+            <input type="text" name="availability" placeholder="Availability (optional)">
+            <input type="text" name="interests" placeholder="Interests (comma-separated)">
+            <input type="text" name="goals" placeholder="Goals (comma-separated)">
+            <button type="submit">Create Profile & Get Suggestions</button>
+        </form>
+        <div id="userError" class="error"></div>
+    </div>
+
+    <div class="card">
+        <h2>Add Event Source</h2>
+        <form id="sourceForm">
+            <input type="text" name="userId" placeholder="User ID" required>
+            <input type="url" name="url" placeholder="Source URL" required>
+            <input type="text" name="type" placeholder="Source Type" required>
+            <button type="submit">Add Source</button>
+        </form>
+        <div id="sourceError" class="error"></div>
+    </div>
+
+    <div class="card">
+        <h2>Suggestions</h2>
+        <div id="suggestions"></div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: form.email.value,
+                        password: form.password.value
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('userId', data.userId);
+                    document.getElementById('loginError').textContent = '';
+                    alert('Logged in successfully!');
+                } else {
+                    document.getElementById('loginError').textContent = data.error || 'Failed to log in';
+                }
+            } catch (error) {
+                document.getElementById('loginError').textContent = error.message || 'Failed to log in';
+            }
+        });
+
+        document.getElementById('userForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            try {
+                const interests = form.interests.value.split(',')
+                    .filter(i => i.trim())
+                    .map(interest => ({ 
+                        interest: interest.trim(), 
+                        weight: 1 
+                    }));
+                
+                const goals = form.goals.value.split(',').filter(g => g.trim());
+                
+                const token = localStorage.getItem('token');
+                const response = await fetch('/', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify({
+                        name: form.name.value,
+                        email: form.email.value,
+                        password: form.password.value,
+                        location: form.location.value,
+                        availability: form.availability.value,
+                        interests,
+                        goals,
+                        getEvents: true
+                    })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    document.getElementById('suggestions').textContent = 
+                        JSON.stringify(data, null, 2);
+                    document.getElementById('userError').textContent = '';
+                    // Store token for new user
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('userId', data.profile.id);
+                    alert('User created successfully!');
+                } else {
+                    document.getElementById('userError').textContent = 
+                        data.error || 'Failed to create user';
+                    console.error('Create user error:', data);
+                }
+            } catch (error) {
+                document.getElementById('userError').textContent = 
+                    error.message || 'Failed to create user';
+            }
+        });
+
+        document.getElementById('sourceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('/add-source', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify({
+                        userId: form.userId.value,
+                        url: form.url.value,
+                        type: form.type.value
+                    })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    document.getElementById('sourceError').textContent = 
+                        'Event source added successfully';
+                } else {
+                    document.getElementById('sourceError').textContent = 
+                        data.error || 'Failed to add event source';
+                }
+            } catch (error) {
+                document.getElementById('sourceError').textContent = 
+                    error.message || 'Failed to add event source';
+            }
+        });
+    </script>
+</body>
+</html>
